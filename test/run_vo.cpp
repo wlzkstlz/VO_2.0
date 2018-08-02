@@ -42,20 +42,54 @@ int main ( int argc, char** argv )
         if ( fin.good() == false )
             break;
     }
+    
+    //add groundtruth
+    vector<SE3>groundtruths;
+    ifstream fin2(dataset_dir+"/rgb_groundtruth.txt");
+    if ( !fin2 )
+    {
+        cout<<"please generate the associate file called rgb_groundtruth.txt!"<<endl;
+        return 1;
+    }
+    while ( !fin2.eof() )
+    {
+        string tx, ty, tz, qx,qy,qz,qw,temp;
+        fin2>>temp>>temp>>temp>>tx>>ty>>tz>>qx>>qy>>qz>>qw;
+	groundtruths.push_back(
+	  SE3(
+	    Eigen::Quaterniond(atof(qw.c_str()),atof(qx.c_str()),atof(qy.c_str()),atof(qz.c_str())),
+	      Vector3d(atof(tx.c_str()),atof(ty.c_str()),atof(tz.c_str()))
+	  )
+	);
+	
+        if ( fin2.good() == false )
+            break;
+    }
+    
+    SE3 first_ground_truth=groundtruths[0];
+    first_ground_truth=first_ground_truth.inverse();
+    for(int i=0;i<groundtruths.size();i++)
+      groundtruths[i]=first_ground_truth*groundtruths[i];
+    
 
     myslam::Camera::Ptr camera ( new myslam::Camera );
     
     // visualization
     cv::viz::Viz3d vis("Visual Odometry");
-    cv::viz::WCoordinateSystem world_coor(1.0), camera_coor(0.5);
     cv::Point3d cam_pos( 0, -1.0, -1.0 ), cam_focal_point(0,0,0), cam_y_dir(0,1,0);
     cv::Affine3d cam_pose = cv::viz::makeCameraPose( cam_pos, cam_focal_point, cam_y_dir );
     vis.setViewerPose( cam_pose );
     
+    
+    cv::viz::WCoordinateSystem world_coor(1.0), camera_coor(0.5),groundtruth_coor(0.5);
     world_coor.setRenderingProperty(cv::viz::LINE_WIDTH, 2.0);
-    camera_coor.setRenderingProperty(cv::viz::LINE_WIDTH, 1.0);
+    groundtruth_coor.setRenderingProperty(cv::viz::LINE_WIDTH, 1.2);
+    camera_coor.setRenderingProperty(cv::viz::LINE_WIDTH, 0.6);
     vis.showWidget( "World", world_coor );
+    vis.showWidget( "Groundtruth", groundtruth_coor );
     vis.showWidget( "Camera", camera_coor );
+    vis.spin();
+    
 
     cout<<"read total "<<rgb_files.size() <<" entries"<<endl;
     for ( int i=0; i<rgb_files.size(); i++ )
@@ -77,7 +111,12 @@ int main ( int argc, char** argv )
         if ( vo->state_ == myslam::VisualOdometry::LOST )
             break;
         SE3 Tcw = pFrame->T_c_w_.inverse();
-        
+	
+	SE3 ground=groundtruths[i];
+	
+	cout<<"Tcw:"<<endl<<Tcw<<endl;
+	cout<<"ground:"<<endl<<ground<<endl;
+	
         // show the map and the camera pose 
         cv::Affine3d M(
             cv::Affine3d::Mat3( 
@@ -89,10 +128,23 @@ int main ( int argc, char** argv )
                 Tcw.translation()(0,0), Tcw.translation()(1,0), Tcw.translation()(2,0)
             )
         );
+	
+	//show the groundtruth
+	cv::Affine3d M_ground(
+            cv::Affine3d::Mat3( 
+                ground.rotation_matrix()(0,0), ground.rotation_matrix()(0,1), ground.rotation_matrix()(0,2),
+                ground.rotation_matrix()(1,0), ground.rotation_matrix()(1,1), ground.rotation_matrix()(1,2),
+                ground.rotation_matrix()(2,0), ground.rotation_matrix()(2,1), ground.rotation_matrix()(2,2)
+            ), 
+            cv::Affine3d::Vec3(
+                ground.translation()(0,0), ground.translation()(1,0), ground.translation()(2,0)
+            )
+        );
         
         cv::imshow("image", color );
         cv::waitKey(1);
         vis.setWidgetPose( "Camera", M);
+	vis.setWidgetPose("Groundtruth",M_ground);
         vis.spinOnce(1, false);
     }
 
