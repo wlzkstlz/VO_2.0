@@ -135,6 +135,14 @@ void VisualOdometry::featureMatching()
             feature_matches_.push_back(m);
         }
     }
+    
+    sort(feature_matches_.begin(),feature_matches_.end(),match_compare);
+    vector<cv::DMatch>tmp;
+    int sz=min<int>(feature_matches_.size(),myslam::Config::get<int>("good_match_num"));
+    for(int i=0;i<sz;i++)
+      tmp.push_back(feature_matches_[i]);
+    swap(tmp,feature_matches_);
+    
     cout<<"good matches: "<<feature_matches_.size()<<endl;
 }
 
@@ -182,6 +190,14 @@ void VisualOdometry::poseEstimationPnP()
         SO3(rvec.at<double>(0,0), rvec.at<double>(1,0), rvec.at<double>(2,0)), 
         Vector3d( tvec.at<double>(0,0), tvec.at<double>(1,0), tvec.at<double>(2,0))
     );
+    
+    //bundle_adjustment
+    if(myslam::Config::get<int>("use_bundleadjustment"))
+    {
+      g2o::SE3Quat se3_quat(T_c_r_estimated_.rotation_matrix(),T_c_r_estimated_.translation());
+      bundle_adjustment(pts3d,pts2d,K,se3_quat);
+      T_c_r_estimated_=SE3(se3_quat.rotation(),se3_quat.translation());
+    }
 }
 
 bool VisualOdometry::checkEstimatedPose()
@@ -216,6 +232,64 @@ void VisualOdometry::addKeyFrame()
 {
     cout<<"adding a key-frame"<<endl;
     map_->insertKeyFrame ( curr_ );
+}
+
+void VisualOdometry::bundle_adjustment(const std::vector<cv::Point3f> pt3d, 
+	const std::vector<cv::Point2f> pt2d, const Mat& K, g2o::SE3Quat &se3_quat)
+{
+    //step1
+    typedef g2o::BlockSolver_6_3 Block;
+    Block::LinearSolverType*linearSolver=new g2o::LinearSolverCSparse<Block::PoseMatrixType>();
+    Block*solver_ptr=new Block(linearSolver);
+    g2o::OptimizationAlgorithmLevenberg*solver=new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
+    
+    g2o::SparseOptimizer optimizer;
+    optimizer.setAlgorithm(solver);
+    
+    //vertex
+    g2o::VertexSE3Expmap*pose=new g2o::VertexSE3Expmap();
+    pose->setId(0);
+    pose->setEstimate(se3_quat);
+    optimizer.addVertex(pose);
+    
+    int index=1;
+    for(const cv::Point3f p:pt3d)
+    {
+      g2o::VertexSBAPointXYZ*point=new g2o::VertexSBAPointXYZ();
+      point->setId(index++);
+      point->setEstimate(Eigen::Vector3d(p.x,p.y,p.z));
+      point->setMarginalized(true);
+      optimizer.addVertex(point);
+    }
+    
+    //camera intrinsics
+    g2o::CameraParameters*camera=new g2o::CameraParameters(
+      K.at<double>(0,0),Eigen::Vector2d(K.at<double>(0,2),K.at<double>(1,2)),0
+    );
+    camera->setId(0);
+    optimizer.addParameter(camera);
+    
+    //edges
+    index=1;
+    for(const cv::Point2f p:pt2d)
+    {
+      g2o::EdgeProjectXYZ2UV*edge=new g2o::EdgeProjectXYZ2UV();
+      edge->setId(index);
+      edge->setVertex(0,dynamic_cast<g2o::VertexSBAPointXYZ*>(optimizer.vertex(index)));
+      edge->setVertex(1,pose);
+      edge->setMeasurement(Eigen::Vector2d(p.x,p.y));
+      edge->setParameterId(0,0);
+      edge->setInformation(Eigen::Matrix2d::Identity());
+      optimizer.addEdge(edge);
+      index++;
+    }
+    
+    boost::timer timer;
+    optimizer.setVerbose(true);
+    optimizer.initializeOptimization();
+    optimizer.optimize(100);
+    se3_quat=pose->estimate();
+    cout<<"optimization of g2o costs time: "<<timer.elapsed()<<endl;
 }
 
 }

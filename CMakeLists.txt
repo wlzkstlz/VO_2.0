@@ -21,11 +21,13 @@ include_directories( ${Sophus_INCLUDE_DIRS} )
 # G2O
 find_package( G2O REQUIRED )
 include_directories( ${G2O_INCLUDE_DIRS} )
+find_package( CSparse REQUIRED )
+include_directories(${CSPARSE_INCLUDE_DIR})
 
 set( THIRD_PARTY_LIBS 
     ${OpenCV_LIBS}
     ${Sophus_LIBRARIES}
-    g2o_core g2o_stuff g2o_types_sba
+    g2o_core g2o_stuff g2o_types_sba g2o_csparse_extension
 )
 ############### source and test ######################
 include_directories( ${PROJECT_SOURCE_DIR}/include )

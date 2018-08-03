@@ -2,7 +2,8 @@
 # data
 # the tum dataset directory, change it to yours! 
 #dataset_dir: /home/xiang/dataset/rgbd_dataset_freiburg1_desk
-dataset_dir: /home/wlzkstlz/slambook/slambook-master (1)/slambook-master/project/rgbd_dataset_freiburg1_xyz
+#dataset_dir: /home/wlzkstlz/slambook/slambook-master (1)/slambook-master/project/rgbd_dataset_freiburg1_xyz
+dataset_dir:/mnt/hgfs/VMWare-Ubuntu-Shared/rgbd_dataset_freiburg1_room
 # camera intrinsics
 # fr1
 camera.fx: 517.3
@@ -21,3 +22,8 @@ max_num_lost: 10
 min_inliers: 10
 keyframe_rotation: 0.1
 keyframe_translation: 0.1
+
+
+#bundle adjustment
+good_match_num:  200
+use_bundleadjustment: 1

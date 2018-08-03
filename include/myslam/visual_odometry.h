@@ -25,6 +25,13 @@
 
 #include <opencv2/features2d/features2d.hpp>
 
+#include <g2o/core/base_vertex.h>
+#include <g2o/core/base_unary_edge.h>
+#include <g2o/core/block_solver.h>
+#include <g2o/core/optimization_algorithm_levenberg.h>
+#include <g2o/solvers/csparse/linear_solver_csparse.h>
+#include <g2o/types/sba/types_six_dof_expmap.h>
+
 namespace myslam 
 {
 class VisualOdometry
@@ -82,7 +89,13 @@ protected:
     bool checkEstimatedPose(); 
     bool checkKeyFrame();
     
+    void bundle_adjustment(const vector<cv::Point3f> pt3d,const vector<cv::Point2f>pt2d,const Mat&K,g2o::SE3Quat& se3_quat);
+    
+private:
+  static bool match_compare(const cv::DMatch&m1,const cv::DMatch&m2)
+  {return m1.distance<m2.distance;}
+  
 };
 }
 
-#endif // VISUALODOMETRY_H
+#endif

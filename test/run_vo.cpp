@@ -19,6 +19,7 @@ int main ( int argc, char** argv )
     myslam::Config::setParameterFile ( argv[1] );
     myslam::VisualOdometry::Ptr vo ( new myslam::VisualOdometry );
 
+    //add rgb and depth files
     string dataset_dir = myslam::Config::get<string> ( "dataset_dir" );
     cout<<"dataset: "<<dataset_dir<<endl;
     ifstream fin ( dataset_dir+"/associate.txt" );
@@ -27,7 +28,6 @@ int main ( int argc, char** argv )
         cout<<"please generate the associate file called associate.txt!"<<endl;
         return 1;
     }
-
     vector<string> rgb_files, depth_files;
     vector<double> rgb_times, depth_times;
     while ( !fin.eof() )
@@ -42,6 +42,7 @@ int main ( int argc, char** argv )
         if ( fin.good() == false )
             break;
     }
+    cout<<"read total "<<rgb_files.size() <<" entries"<<endl;
     
     //add groundtruth
     vector<SE3>groundtruths;
@@ -65,33 +66,50 @@ int main ( int argc, char** argv )
         if ( fin2.good() == false )
             break;
     }
-    
     SE3 first_ground_truth=groundtruths[0];
     first_ground_truth=first_ground_truth.inverse();
+    vector<cv::Affine3d> ground_traj_elements;
     for(int i=0;i<groundtruths.size();i++)
+    {
       groundtruths[i]=first_ground_truth*groundtruths[i];
-    
+      
+      //show the groundtruth
+      SE3 ground=groundtruths[i];
+      ground_traj_elements.push_back(
+	cv::Affine3d(
+	    cv::Affine3d::Mat3( 
+		ground.rotation_matrix()(0,0), ground.rotation_matrix()(0,1), ground.rotation_matrix()(0,2),
+		ground.rotation_matrix()(1,0), ground.rotation_matrix()(1,1), ground.rotation_matrix()(1,2),
+		ground.rotation_matrix()(2,0), ground.rotation_matrix()(2,1), ground.rotation_matrix()(2,2)
+	    ), 
+	    cv::Affine3d::Vec3(
+		ground.translation()(0,0), ground.translation()(1,0), ground.translation()(2,0)
+	    )
+	  )
+      );
+    }
+    cv::viz::WTrajectory ground_traj(ground_traj_elements);
 
-    myslam::Camera::Ptr camera ( new myslam::Camera );
-    
     // visualization
     cv::viz::Viz3d vis("Visual Odometry");
     cv::Point3d cam_pos( 0, -1.0, -1.0 ), cam_focal_point(0,0,0), cam_y_dir(0,1,0);
     cv::Affine3d cam_pose = cv::viz::makeCameraPose( cam_pos, cam_focal_point, cam_y_dir );
     vis.setViewerPose( cam_pose );
     
-    
-    cv::viz::WCoordinateSystem world_coor(1.0), camera_coor(0.5),groundtruth_coor(0.5);
+    cv::viz::WCoordinateSystem world_coor(1.0), camera_coor(0.5),groundtruth_coor(0.7);
     world_coor.setRenderingProperty(cv::viz::LINE_WIDTH, 2.0);
-    groundtruth_coor.setRenderingProperty(cv::viz::LINE_WIDTH, 1.2);
-    camera_coor.setRenderingProperty(cv::viz::LINE_WIDTH, 0.6);
+    groundtruth_coor.setRenderingProperty(cv::viz::LINE_WIDTH, 2.0);
+    camera_coor.setRenderingProperty(cv::viz::LINE_WIDTH, 2.0);
     vis.showWidget( "World", world_coor );
     vis.showWidget( "Groundtruth", groundtruth_coor );
     vis.showWidget( "Camera", camera_coor );
-    vis.spin();
+    vis.showWidget("GroundTraj",ground_traj);
     
-
-    cout<<"read total "<<rgb_files.size() <<" entries"<<endl;
+    
+    
+    
+    //run vo loop
+    myslam::Camera::Ptr camera ( new myslam::Camera );
     for ( int i=0; i<rgb_files.size(); i++ )
     {
         Mat color = cv::imread ( rgb_files[i] );
