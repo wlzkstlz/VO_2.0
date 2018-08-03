@@ -25,6 +25,7 @@
 
 #include "myslam/config.h"
 #include "myslam/visual_odometry.h"
+#include "myslam/g2o_types.h"
 
 namespace myslam
 {
@@ -195,7 +196,11 @@ void VisualOdometry::poseEstimationPnP()
     if(myslam::Config::get<int>("use_bundleadjustment"))
     {
       g2o::SE3Quat se3_quat(T_c_r_estimated_.rotation_matrix(),T_c_r_estimated_.translation());
-      bundle_adjustment(pts3d,pts2d,K,se3_quat);
+      
+      if(myslam::Config::get<int>("use_ba_pose_only"))
+	bundle_adjustment_pose_only(pts3d,pts2d,K,se3_quat);
+      else
+	bundle_adjustment(pts3d,pts2d,K,se3_quat);
       T_c_r_estimated_=SE3(se3_quat.rotation(),se3_quat.translation());
     }
 }
@@ -291,5 +296,52 @@ void VisualOdometry::bundle_adjustment(const std::vector<cv::Point3f> pt3d,
     se3_quat=pose->estimate();
     cout<<"optimization of g2o costs time: "<<timer.elapsed()<<endl;
 }
+
+void VisualOdometry::bundle_adjustment_pose_only(const vector< cv::Point3f > pt3d, const vector< cv::Point2f > pt2d, const Mat& K, g2o::SE3Quat& se3_quat)
+{
+    //step1
+    typedef g2o::BlockSolver_6_3 Block;
+    Block::LinearSolverType*linearSolver=new g2o::LinearSolverCSparse<Block::PoseMatrixType>();
+    Block*solver_ptr=new Block(linearSolver);
+    g2o::OptimizationAlgorithmLevenberg*solver=new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
+    
+    g2o::SparseOptimizer optimizer;
+    optimizer.setAlgorithm(solver);
+    
+    //vertex
+    g2o::VertexSE3Expmap*pose=new g2o::VertexSE3Expmap();
+    pose->setId(0);
+    pose->setEstimate(se3_quat);
+    optimizer.addVertex(pose);
+    
+    //camera intrinsics
+//     g2o::CameraParameters*camera=new g2o::CameraParameters(
+//       K.at<double>(0,0),Eigen::Vector2d(K.at<double>(0,2),K.at<double>(1,2)),0
+//     );
+//     camera->setId(0);
+//     optimizer.addParameter(camera);
+    
+    //edges
+    for(int i=0;i<pt2d.size();i++)
+    {
+      myslam::EdgeProjectXYZ2UVPoseOnly*edge=new myslam::EdgeProjectXYZ2UVPoseOnly();
+      edge->setId(i);
+      edge->setVertex(0,pose);
+      edge->setMeasurement(Eigen::Vector2d(pt2d[i].x,pt2d[i].y));
+      edge->setParameterId(0,0);
+      edge->setInformation(Eigen::Matrix2d::Identity());
+      edge->point_=Vector3d(pt3d[i].x,pt3d[i].y,pt3d[i].z);
+      edge->camera_=curr_->camera_;
+      optimizer.addEdge(edge);
+    }
+    
+    boost::timer timer;
+    optimizer.setVerbose(true);
+    optimizer.initializeOptimization();
+    optimizer.optimize(100);
+    se3_quat=pose->estimate();
+    cout<<"optimization of pose only g2o costs time: "<<timer.elapsed()<<endl;
+}
+
 
 }

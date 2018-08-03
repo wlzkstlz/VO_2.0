@@ -27,3 +27,4 @@ keyframe_translation: 0.1
 #bundle adjustment
 good_match_num:  200
 use_bundleadjustment: 1
+use_ba_pose_only: 1
