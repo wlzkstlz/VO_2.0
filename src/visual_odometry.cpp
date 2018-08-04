@@ -39,6 +39,7 @@ VisualOdometry::VisualOdometry() :
     match_ratio_        = Config::get<float> ( "match_ratio" );
     max_num_lost_       = Config::get<float> ( "max_num_lost" );
     min_inliers_        = Config::get<int> ( "min_inliers" );
+    max_motion_norm	= Config::get<double>("max_motion_norm");
     key_frame_min_rot   = Config::get<double> ( "keyframe_rotation" );
     key_frame_min_trans = Config::get<double> ( "keyframe_translation" );
     orb_ = cv::ORB::create ( num_of_features_, scale_factor_, level_pyramid_ );
@@ -121,13 +122,10 @@ void VisualOdometry::featureMatching()
     cv::BFMatcher matcher ( cv::NORM_HAMMING );
     matcher.match ( descriptors_ref_, descriptors_curr_, matches );
     // select the best matches
-    float min_dis = std::min_element (
-                        matches.begin(), matches.end(),
-                        [] ( const cv::DMatch& m1, const cv::DMatch& m2 )
-    {
-        return m1.distance < m2.distance;
-    } )->distance;
-
+    float min_dis = std::min_element (matches.begin(), matches.end(),
+					[] ( const cv::DMatch& m1, const cv::DMatch& m2 )
+					{return m1.distance < m2.distance;} 
+				     )->distance;
     feature_matches_.clear();
     for ( cv::DMatch& m : matches )
     {
@@ -137,9 +135,10 @@ void VisualOdometry::featureMatching()
         }
     }
     
-    sort(feature_matches_.begin(),feature_matches_.end(),match_compare);
+    sort(feature_matches_.begin(),feature_matches_.end(),[](const cv::DMatch&m1,const cv::DMatch&m2)
+							  {return m1.distance<m2.distance;});
     vector<cv::DMatch>tmp;
-    int sz=min<int>(feature_matches_.size(),myslam::Config::get<int>("good_match_num"));
+    int sz=min<int>(feature_matches_.size(),myslam::Config::get<int>("minmum_distance_match_num"));
     for(int i=0;i<sz;i++)
       tmp.push_back(feature_matches_[i]);
     swap(tmp,feature_matches_);
@@ -183,6 +182,9 @@ void VisualOdometry::poseEstimationPnP()
         0, ref_->camera_->fy_, ref_->camera_->cy_,
         0,0,1
     );
+    
+    cout<<"debug K="<<endl<<K<<endl;
+    
     Mat rvec, tvec, inliers;
     cv::solvePnPRansac( pts3d, pts2d, K, Mat(), rvec, tvec, false, 100, 4.0, 0.99, inliers );
     num_inliers_ = inliers.rows;
@@ -215,7 +217,7 @@ bool VisualOdometry::checkEstimatedPose()
     }
     // if the motion is too large, it is probably wrong
     Sophus::Vector6d d = T_c_r_estimated_.log();
-    if ( d.norm() > 5.0 )
+    if ( d.norm() > max_motion_norm)
     {
         cout<<"reject because motion is too large: "<<d.norm()<<endl;
         return false;

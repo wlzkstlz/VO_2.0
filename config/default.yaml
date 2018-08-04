@@ -20,11 +20,13 @@ level_pyramid: 8
 match_ratio: 2.0
 max_num_lost: 10
 min_inliers: 10
+max_motion_norm:  0.3
+#1.0 #5.0
 keyframe_rotation: 0.1
 keyframe_translation: 0.1
 
 
 #bundle adjustment
-good_match_num:  200
+minmum_distance_match_num:  20
 use_bundleadjustment: 1
 use_ba_pose_only: 1

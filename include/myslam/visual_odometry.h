@@ -22,10 +22,7 @@
 
 #include "myslam/common_include.h"
 #include "myslam/map.h"
-
 #include <opencv2/features2d/features2d.hpp>
-
-
 
 namespace myslam 
 {
@@ -33,7 +30,8 @@ class VisualOdometry
 {
 public:
     typedef shared_ptr<VisualOdometry> Ptr;
-    enum VOState {
+    enum VOState 
+    {
         INITIALIZING=-1,
         OK=0,
         LOST
@@ -62,6 +60,7 @@ public:
     float match_ratio_;      // ratio for selecting  good matches
     int max_num_lost_;      // max number of continuous lost times
     int min_inliers_;       // minimum inliers
+    double max_motion_norm;
     
     double key_frame_min_rot;   // minimal rotation of two key-frames
     double key_frame_min_trans; // minimal translation of two key-frames
@@ -86,14 +85,7 @@ protected:
     
     void bundle_adjustment(const vector<cv::Point3f> pt3d,const vector<cv::Point2f>pt2d,const Mat&K,g2o::SE3Quat& se3_quat);
     void bundle_adjustment_pose_only(const vector<cv::Point3f> pt3d,const vector<cv::Point2f>pt2d,const Mat&K,g2o::SE3Quat& se3_quat);
-   
-private:
-  static bool match_compare(const cv::DMatch&m1,const cv::DMatch&m2)
-  {return m1.distance<m2.distance;}
-  
 };
-
-
 }
 
 #endif
