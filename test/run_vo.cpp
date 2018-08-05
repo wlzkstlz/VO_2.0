@@ -7,6 +7,7 @@
 
 #include "myslam/config.h"
 #include "myslam/visual_odometry.h"
+#include "myslam/vo2.h"
 
 int main ( int argc, char** argv )
 {
@@ -17,8 +18,8 @@ int main ( int argc, char** argv )
     }
 
     myslam::Config::setParameterFile ( argv[1] );
-    myslam::VisualOdometry::Ptr vo ( new myslam::VisualOdometry );
-
+    //myslam::VisualOdometry::Ptr vo ( new myslam::VisualOdometry );
+    myslam::VO2::Ptr vo ( new myslam::VO2 );
     //add rgb and depth files
     string dataset_dir = myslam::Config::get<string> ( "dataset_dir" );
     cout<<"dataset: "<<dataset_dir<<endl;

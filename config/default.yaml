@@ -30,3 +30,9 @@ keyframe_translation: 0.1
 minmum_distance_match_num:  40
 use_bundleadjustment: 1
 use_ba_pose_only: 1
+
+#local map
+mp_min_match_ratio_: 0.3
+max_view_angle: 45.0
+map_keep_mappoint_size:1000
+min_match_mp_num:100

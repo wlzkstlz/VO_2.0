@@ -86,5 +86,13 @@ bool Frame::isInFrame ( const Vector3d& pt_world )
         && pixel(0,0)<color_.cols 
         && pixel(1,0)<color_.rows;
 }
+double Frame::getViewAngel(const Vector3d& pt_world)
+{
+  Vector3d d=pt_world-getCamCenter();
+  Vector3d z=T_c_w_.inverse()*Vector3d(0,0,1)-getCamCenter();
+  double angle=d.dot(z)/(d.norm()*z.norm());
+  return angle;
+}
+
 
 }

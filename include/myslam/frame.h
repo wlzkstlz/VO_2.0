@@ -54,6 +54,8 @@ public: // data members
     
     // check if a point is in this frame 
     bool isInFrame( const Vector3d& pt_world );
+    
+    double getViewAngel(const Vector3d& pt_world);
 };
 
 }

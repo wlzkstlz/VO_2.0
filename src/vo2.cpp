@@ -2,12 +2,13 @@
 #include "myslam/config.h"
 
 #include <opencv2/calib3d/calib3d.hpp>
+#include <boost/concept_check.hpp>
 
 namespace myslam 
 {
 VO2::VO2():VisualOdometry()
 {
-  
+  mp_min_match_ratio_=myslam::Config::get<float>("mp_min_match_ratio_");
 }
 
 bool VO2::addFrame(Frame::Ptr frame)
@@ -52,6 +53,8 @@ bool VO2::addFrame(Frame::Ptr frame)
             {
                 addKeyFrame();
             }
+            
+            optimizeMap();
         }
         else // bad estimation due to various reasons
         {
@@ -79,8 +82,8 @@ void VO2::featureMatching()
   //prepare mappoint for match;
   curr_->T_c_w_=ref_->T_c_w_;
   Mat descriptor_map_inrange;
-  vector<int>indice;
   pt3d_matching.clear();
+  vector<int>ids_inframe;
   for(auto it=map_->map_points_.begin();it!=map_->map_points_.end();it++)
   {
     if(curr_->isInFrame(it->second->pos_))
@@ -89,7 +92,7 @@ void VO2::featureMatching()
       descriptor_map_inrange.push_back(it->second->descriptor_);
       pt3d_matching.push_back(cv::Point3f(it->second->pos_(0,0),
 					  it->second->pos_(1,0),it->second->pos_(2,0)));
-      indice.push_back(it->first);
+      ids_inframe.push_back(it->first);
     }
   }
   
@@ -97,7 +100,14 @@ void VO2::featureMatching()
   cv::FlannBasedMatcher matcher;
   vector<cv::DMatch>matches;
   matcher.match(descriptor_map_inrange,descriptors_curr_,matches);
- 
+
+  for ( cv::DMatch& m : matches )
+  {
+    int id=ids_inframe[m.queryIdx];
+    map_->map_points_.find(id)->second->matched_times_++;
+    matched_mp3d_ids_.push_back(id);
+    matched_kp2d_ids_.push_back(m.trainIdx);
+  }
   
     // select the best matches
     float min_dis = std::min_element (matches.begin(), matches.end(),
@@ -162,5 +172,98 @@ void VO2::poseEstimationPnP()
     
     T_c_r_estimated_=T_c_w_estimated*ref_->T_c_w_.inverse();
 }
+
+void VO2::optimizeMap()
+{
+  for(auto it=map_->map_points_.begin();it!=map_->map_points_.end();)
+  {
+    if(curr_->isInFrame(it->second->pos_)==false)
+    {
+      it=map_->map_points_.erase(it);
+      continue;
+    }
+    
+    float ratio=(float)it->second->matched_times_/(float)it->second->observed_times_;
+    if(ratio<mp_min_match_ratio_)
+    {
+      it=map_->map_points_.erase(it);
+      continue;      
+    }
+    
+    double max_view_angle=myslam::Config::get<double>("max_view_angle")/180.0*M_PI;
+    double view_angle=acos(curr_->getViewAngel(it->second->pos_));
+    if(view_angle>max_view_angle)
+    {
+      it=map_->map_points_.erase(it);
+      continue;      
+    }
+  }
+  
+  //add some mappoints
+  if(feature_matches_.size()<myslam::Config::get<int>("min_match_mp_num"))
+  {
+    addMapPoints();
+  }
+
+  int keep_size=myslam::Config::get<int>("map_keep_mappoint_size");
+  if(map_->map_points_.size()>keep_size)
+  {
+    mp_min_match_ratio_+=0.1;
+    mp_min_match_ratio_=std::min(mp_min_match_ratio_,0.9f);
+  }
+  else
+  {
+    mp_min_match_ratio_=myslam::Config::get<double>("mp_min_match_ratio_");
+  }
+  
+  
+}
+
+void VO2::addMapPoints()
+{
+  //modify mappoints
+  for (int i=0;i<matched_mp3d_ids_.size();i++)
+  {
+    int id3d=matched_mp3d_ids_[i];
+    MapPoint::Ptr mp=map_->map_points_.find(id3d)->second;
+    int observed_times=mp->observed_times_;
+    int matched_times=mp->matched_times_;
+    //map_->map_points_.erase(id3d);
+    
+    int id2d=matched_kp2d_ids_[i];
+    Vector2d pt(keypoints_curr_[id2d].pt.x,keypoints_curr_[id2d].pt.y);
+    Vector3d pos=curr_->camera_->pixel2world(pt,curr_->T_c_w_,
+		curr_->findDepth(keypoints_curr_[id2d]));
+    MapPoint::Ptr new_mp=(MapPoint::Ptr)new MapPoint(id3d,pos,Vector3d(0,0,0));
+    map_->insertMapPoint(new_mp);
+  }
+  
+  //add mappoints
+  vector<int>kps2add;
+  for(int i=0;i<keypoints_curr_.size();i++)
+  {
+    kps2add[i]=1;
+  }
+  for(auto id:matched_kp2d_ids_)
+  {
+    kps2add[id]=0;
+  }
+  for(int i=0;i<keypoints_curr_.size();i++)
+  {
+    if(kps2add[i])
+    {
+      //int id2d=matched_kp2d_ids_[i];
+      Vector2d pt(keypoints_curr_[i].pt.x,keypoints_curr_[i].pt.y);
+      Vector3d pos=curr_->camera_->pixel2world(pt,curr_->T_c_w_,
+		  curr_->findDepth(keypoints_curr_[i]));
+      MapPoint::Ptr new_mp=MapPoint::createMapPoint();
+      new_mp->pos_=pos;
+      map_->insertMapPoint(new_mp);
+    }
+  }
+  
+}
+
+
 
 }
