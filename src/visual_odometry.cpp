@@ -149,7 +149,7 @@ void VisualOdometry::featureMatching()
 void VisualOdometry::setRef3DPoints()
 {
     // select the features with depth measurements 
-    pts_3d_ref_.clear();
+    pt3d_matching.clear();
     descriptors_ref_ = Mat();
     for ( size_t i=0; i<keypoints_curr_.size(); i++ )
     {
@@ -159,7 +159,7 @@ void VisualOdometry::setRef3DPoints()
             Vector3d p_cam = ref_->camera_->pixel2camera(
                 Vector2d(keypoints_curr_[i].pt.x, keypoints_curr_[i].pt.y), d
             );
-            pts_3d_ref_.push_back( cv::Point3f( p_cam(0,0), p_cam(1,0), p_cam(2,0) ));
+            pt3d_matching.push_back( cv::Point3f( p_cam(0,0), p_cam(1,0), p_cam(2,0) ));
             descriptors_ref_.push_back(descriptors_curr_.row(i));
         }
     }
@@ -173,15 +173,11 @@ void VisualOdometry::poseEstimationPnP()
     
     for ( cv::DMatch m:feature_matches_ )
     {
-        pts3d.push_back( pts_3d_ref_[m.queryIdx] );
+        pts3d.push_back( pt3d_matching[m.queryIdx] );
         pts2d.push_back( keypoints_curr_[m.trainIdx].pt );
     }
     
-    Mat K = ( cv::Mat_<double>(3,3)<<
-        ref_->camera_->fx_, 0, ref_->camera_->cx_,
-        0, ref_->camera_->fy_, ref_->camera_->cy_,
-        0,0,1
-    );
+    Mat K = ref_->camera_->getK();
     
     cout<<"debug K="<<endl<<K<<endl;
     
@@ -189,12 +185,14 @@ void VisualOdometry::poseEstimationPnP()
     cv::solvePnPRansac( pts3d, pts2d, K, Mat(), rvec, tvec, false, 100, 4.0, 0.99, inliers );
     num_inliers_ = inliers.rows;
     cout<<"pnp inliers: "<<num_inliers_<<endl;
+    cout<<"inliers:"<<inliers<<endl;
     T_c_r_estimated_ = SE3(
         SO3(rvec.at<double>(0,0), rvec.at<double>(1,0), rvec.at<double>(2,0)), 
         Vector3d( tvec.at<double>(0,0), tvec.at<double>(1,0), tvec.at<double>(2,0))
     );
     
-    //bundle_adjustment
+    //bundle_adjustment；
+
     if(myslam::Config::get<int>("use_bundleadjustment"))
     {
       g2o::SE3Quat se3_quat(T_c_r_estimated_.rotation_matrix(),T_c_r_estimated_.translation());
@@ -315,14 +313,7 @@ void VisualOdometry::bundle_adjustment_pose_only(const vector< cv::Point3f > pt3
     pose->setId(0);
     pose->setEstimate(se3_quat);
     optimizer.addVertex(pose);
-    
-    //camera intrinsics
-//     g2o::CameraParameters*camera=new g2o::CameraParameters(
-//       K.at<double>(0,0),Eigen::Vector2d(K.at<double>(0,2),K.at<double>(1,2)),0
-//     );
-//     camera->setId(0);
-//     optimizer.addParameter(camera);
-    
+
     //edges
     for(int i=0;i<pt2d.size();i++)
     {

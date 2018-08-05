@@ -43,7 +43,7 @@ public:
     Frame::Ptr  curr_;      // current frame 
     
     cv::Ptr<cv::ORB> orb_;  // orb detector and computer 
-    vector<cv::Point3f>     pts_3d_ref_;        // 3d points in reference frame 
+    vector<cv::Point3f>     pt3d_matching;        // 3d points in reference frame 
     vector<cv::KeyPoint>    keypoints_curr_;    // keypoints in current frame
     Mat                     descriptors_curr_;  // descriptor in current frame 
     Mat                     descriptors_ref_;   // descriptor in reference frame 
@@ -69,14 +69,14 @@ public: // functions
     VisualOdometry();
     ~VisualOdometry();
     
-    bool addFrame( Frame::Ptr frame );      // add a new frame 
+    virtual bool addFrame( Frame::Ptr frame );      // add a new frame 
     
 protected:  
     // inner operation 
     void extractKeyPoints();
     void computeDescriptors(); 
-    void featureMatching();
-    void poseEstimationPnP(); 
+    virtual void featureMatching();
+    virtual void poseEstimationPnP(); 
     void setRef3DPoints();
     
     void addKeyFrame();
